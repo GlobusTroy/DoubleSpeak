@@ -2,17 +2,19 @@ import enum
 
 class PackType(enum.Enum):
     ClientData = 1
-    ServerMessage = 2
-    KeepAlive = 3
+    Handshake = 2
+    ServerMessage = 3
+    KeepAlive = 4
 
 class Netpack:
     CLIENT_DATA_MIN = 0
     CLIENT_DATA_MAX = 50
-    SERVER_MESSAGE = 51
-    KEEPALIVE = 52
+    HANDSHAKE = 51
+    SERVER_MESSAGE = 52
+    KEEPALIVE = 53
 
     typeToOrd = {PackType.ClientData:CLIENT_DATA_MIN, PackType.ServerMessage:SERVER_MESSAGE,
-                PackType.KeepAlive:KEEPALIVE}
+                PackType.KeepAlive:KEEPALIVE, PackType.Handshake:HANDSHAKE}
 
     def __init__(self, packType=None, head=None, data=None, datapacket=None):
         if packType is not None:
@@ -26,10 +28,12 @@ class Netpack:
     def getPackType(head):
         if head <= Netpack.CLIENT_DATA_MAX and head >= Netpack.CLIENT_DATA_MIN:
             return PackType.ClientData
-        if head == Netpack.SERVER_MESSAGE:
-            return PackType.ServerMessage
-        if head == Netpack.KEEPALIVE:
-            return PackType.KeepAlive
+
+        inverseMap = {v: k for k, v in Netpack.typeToOrd.items()}
+        try:
+            return inverseMap[head]
+        except:
+            return None
 
     def out(self):
         return chr(self.head).encode() + self.data

@@ -1,11 +1,13 @@
-from socket import socket, AF_INET, SOCK_DGRAM
+from socket import socket, AF_INET, SOCK_DGRAM, timeout
 from threading import Thread
 import pyaudio
 from array import array
 from netpack import Netpack, PackType
+from time import time
 
 OK = 'ok'
 DEFAULT_BUFFER_SIZE = 2049
+CLIENT_CONNECTION_TIMEOUT = 7.5
 
 def getDefaultAudioSettings():
     DEFAULT_AUDIO_SETTINGS = {
@@ -22,6 +24,7 @@ class AudioClient:
 
         self.server = (serverHost, serverPort)
         self.client = socket(family=AF_INET, type=SOCK_DGRAM)
+        self.client.settimeout(CLIENT_CONNECTION_TIMEOUT)
         self.bufferSize = bufferSize
 
         self.audio=pyaudio.PyAudio()
@@ -38,6 +41,7 @@ class AudioClient:
         self.receiveThread = None
         self.name = name
         self.audioSettings = audioSettings
+        self.lastReceived = time()
         self.connected = False
 
     def addOutputStream(self, char):
@@ -53,13 +57,16 @@ class AudioClient:
         if self.connected:
             return True
 
-        self.client.sendto(self.name.encode(encoding = 'UTF-8'), self.server)
+        datapack = Netpack(packType=PackType.Handshake, data=self.name.encode(encoding='UTF-8'))
+        self.client.sendto(datapack.out(), self.server)
+
         data, addr = self.client.recvfrom(self.bufferSize)
-        print(addr)
-        if addr==self.server and data.decode('UTF-8')==OK:
+        datapack = Netpack(datapacket=data)
+
+        if (addr==self.server and datapack.PackType==PackType.Handshake and 
+        datapack.data.decode('UTF-8')==OK):
             print('Connected to server successfully!')
             self.connected = True
-
         return self.connected
 
     def start(self):
@@ -72,7 +79,7 @@ class AudioClient:
             self.sendThread.start()
 
     def sendAudio(self):
-        while True:
+        while self.connected:
             data = self.streamIn.read(self.audioSettings['CHUNK'])
             vol = max(array('h', data))
             if vol > self.audioSettings['THRESHOLD']:
@@ -80,17 +87,24 @@ class AudioClient:
                 self.client.sendto(datapack.out(), self.server)
 
     def recieveAudio(self):
-        while True:
-            data, addr = self.client.recvfrom(self.bufferSize)
-            datapack = Netpack(datapacket=data)
-            if datapack.PackType == PackType.ClientData:
-                char = datapack.head
-                if self.streamsOut.get(char, None) is None:
-                    self.addOutputStream(char)
-                self.streamsOut[char].write(datapack.data)
-            elif datapack.PackType == PackType.KeepAlive:
-                outpack = Netpack(packType=PackType.KeepAlive, data=OK.encode('UTF-8'))
-                self.client.sendto(outpack.out(), self.server)
+        while self.connected:
+            try:
+                data, addr = self.client.recvfrom(self.bufferSize)
+                datapack = Netpack(datapacket=data)
+
+                if datapack.PackType == PackType.ClientData:
+                    char = datapack.head
+                    if self.streamsOut.get(char, None) is None:
+                        self.addOutputStream(char)
+                    self.streamsOut[char].write(datapack.data)
+
+                elif datapack.PackType == PackType.KeepAlive:
+                    outpack = Netpack(packType=PackType.KeepAlive, data=OK.encode('UTF-8'))
+                    self.client.sendto(outpack.out(), self.server)
+
+            except timeout:
+                self.connected = False
+                print('Lost connection to server!')
     
 
 
@@ -101,4 +115,7 @@ name = input("Enter name\n")
 #client = AudioClient(HOST, PORT, name=name)
 client = AudioClient('127.0.0.1', 8000, name=name)
 client.start()
+
+client.receiveThread.join()
+client.sendThread.join()
     
