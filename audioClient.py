@@ -20,7 +20,7 @@ def getDefaultAudioSettings():
 
 class AudioClient:
     def __init__(self, serverHost, serverPort, bufferSize=DEFAULT_BUFFER_SIZE, 
-        audioSettings=getDefaultAudioSettings(), name='client'):
+    audioSettings=getDefaultAudioSettings(), name='client'):
 
         self.server = (serverHost, serverPort)
         self.client = socket(family=AF_INET, type=SOCK_DGRAM)
