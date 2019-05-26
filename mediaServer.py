@@ -8,14 +8,14 @@ OK = 'ok'
 
 DEFAULT_BUFFER_SIZE = 2049
 
-class AudioServer:
+class MediaServer:
     SOCKET_TIMEOUT = 0.5
-    CLIENT_CONNECTION_TIMEOUT = 7.5
-    START_PINGING = 2
+    CLIENT_CONNECTION_TIMEOUT = 5.0
+    START_PINGING = 2.0
     MAX_PINGS = 3
     def __init__(self, host, port, bufferSize=DEFAULT_BUFFER_SIZE):
         self.server = socket(family=AF_INET, type=SOCK_DGRAM)
-        self.server.settimeout(AudioServer.SOCKET_TIMEOUT)
+        self.server.settimeout(MediaServer.SOCKET_TIMEOUT)
 
         self.hostAddr = (host,port)
         self.bufferSize = bufferSize
@@ -76,11 +76,11 @@ class AudioServer:
         disconnected = []
         
         for addr, lastTime in self.timeOfLastMessage.items():
-            if currTime - lastTime > AudioServer.CLIENT_CONNECTION_TIMEOUT:
+            if currTime - lastTime > MediaServer.CLIENT_CONNECTION_TIMEOUT:
                 disconnected.append(addr)
                 
-            elif ((currTime - lastTime >= AudioServer.START_PINGING) and 
-            self.missedPings[addr] < AudioServer.MAX_PINGS):
+            elif ((currTime - lastTime >= MediaServer.START_PINGING) and 
+            self.missedPings[addr] < MediaServer.MAX_PINGS):
                 datapack = Netpack(packType=PackType.KeepAlive, data=OK.encode(encoding='UTF-8'))
                 self.server.sendto(datapack.out(), addr)
                 #print('Pinging {}...'.format(self.clients[addr]))
@@ -112,7 +112,7 @@ class AudioServer:
 #HOST = input("Enter Server IP\n")
 #PORT = int(input("Enter Port Number\n"))
 
-#server = AudioServer(HOST, PORT)
+#server = MediaServer(HOST, PORT)
 
-server = AudioServer('127.0.0.1', 8000)
+server = MediaServer('127.0.0.1', 8000)
 server.start()
