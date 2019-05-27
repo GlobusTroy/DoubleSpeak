@@ -59,12 +59,17 @@ class GUI:
     def update(self):
         self.canvas.delete('all')
 
-        newLabels = False
-        if len(self.labels) != len(self.clients):
+        newLabels = ((len(self.labels) != len(self.clients)) or 
+        (self.canvas.winfo_width() != self.__lastWidth) or
+        (self.canvas.winfo_height() != self.__lastHeight))
+
+        if newLabels:
             for lbl in self.labels:
                 lbl.destroy()
             self.labels = [None for client in self.clients]
-            newLabels = True
+
+        self.__lastHeight = self.canvas.winfo_height()
+        self.__lastWidth = self.canvas.winfo_width()
 
         for i, client in enumerate(self.clients):
             x,y,w,h = self.getImageDimensions(i, len(self.clients))
