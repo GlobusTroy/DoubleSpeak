@@ -107,15 +107,15 @@ class AudioClient:
                 print('Lost connection to server!')
     
 
+if __name__ == "__main__":
+    #HOST = input("Enter Server IP\n")
+    #PORT = int(input("Enter Port Number\n"))
+    name = input("Enter name\n")
 
-#HOST = input("Enter Server IP\n")
-#PORT = int(input("Enter Port Number\n"))
-name = input("Enter name\n")
+    #client = AudioClient(HOST, PORT, name=name)
+    client = AudioClient('127.0.0.1', 8000, name=name)
+    client.start()
 
-#client = AudioClient(HOST, PORT, name=name)
-client = AudioClient('127.0.0.1', 8000, name=name)
-client.start()
-
-client.receiveThread.join()
-client.sendThread.join()
+    client.receiveThread.join()
+    client.sendThread.join()
     
