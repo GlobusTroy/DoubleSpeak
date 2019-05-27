@@ -1,4 +1,5 @@
 import cv2
+import numpy as np
 
 class VideoCamera(object):
     def __init__(self):
@@ -8,24 +9,34 @@ class VideoCamera(object):
     def __del__(self):
         self.video.release()
     
-    def getFrame(self):
+    def getFrame(self, resolution=480):
         success, image = self.video.read()
 
+        #Calculate new image shape
+        shapeOrig = image.shape
+        ratio = resolution / shapeOrig[0]
+        shapeOut = ( int(shapeOrig[1] * ratio), resolution )
+
+        #Resize the image
+        image = cv2.resize(image, shapeOut ,interpolation=cv2.INTER_AREA)
+
         # Encode raw image into jpg
-        return image
         ret, jpeg = cv2.imencode('.jpg', image)
 
         return jpeg.tobytes()
 
-
 from socket import socket, AF_INET, SOCK_DGRAM, timeout
 from threading import Thread
-from netpack import Netpack, PackType
+from netpack import Netpack, Videopack, PackType
 from time import time, sleep
+from math import ceil
 
 OK = 'ok'
-DEFAULT_BUFFER_SIZE = 2049
+PINGME = 'pingme'
+DEFAULT_BUFFER_SIZE = 4096
 CLIENT_CONNECTION_TIMEOUT = 7.5
+START_PINGING = 4.5
+OLD_PACKET_THRESHOLD = 2.0
 
 class VideoClient:
     def __init__(self, serverHost, serverPort, bufferSize=DEFAULT_BUFFER_SIZE, 
@@ -37,12 +48,14 @@ class VideoClient:
         self.bufferSize = bufferSize
 
         self.cam = VideoCamera()
-        self.clientFrames = {}
+        self.currentFrames = {}
+        self.chunkedFrames = {}
 
         self.lastReceived = time()
         self.connected = False
         self.fps = fps
 
+        self.imageId = 0
         self.sendThread = None
         self.receiveThread = None
 
@@ -71,29 +84,93 @@ class VideoClient:
             self.sendThread = Thread(target=self.sendVideo)
             self.sendThread.start()
 
-    #def sendFrameChunks(self, image):
+    def sendFrameChunks(self, imageBytes):
+        chunkSize = self.bufferSize - 4
+        numChunks = ceil(len(imageBytes) / chunkSize)
+        for i in range(numChunks):
+            dataChunk = imageBytes[:chunkSize]
+            imageBytes = imageBytes[chunkSize:]
+            nextPacket = Videopack(packType=PackType.ClientData, data=dataChunk,
+                imageId=self.imageId, index=i, imageLen=numChunks)
+            self.client.sendto(nextPacket.out(), self.server)
+        self.imageId = (self.imageId + 1) % 256
 
+    def processFrameChunk(self, datapack):
+        clientId = datapack.head
+
+        newFrame = (self.chunkedFrames[clientId].get(datapack.imageId, None) is None)
+        oldFrame = (not newFrame) and (time() - self.chunkedFrames[clientId][datapack.imageId].get('last', time()) 
+            > OLD_PACKET_THRESHOLD)
+
+        #New frame to construct
+        if newFrame or oldFrame:
+            self.chunkedFrames[clientId][datapack.imageId] = {}
+
+        if datapack.index == 0:
+            self.chunkedFrames[clientId][datapack.imageId]['len'] = datapack.imageLen
+
+        #Add chunk to proper frame list
+        self.chunkedFrames[clientId][datapack.imageId][datapack.index] = datapack.data
+        #Update last packet received timestamp
+        self.chunkedFrames[clientId][datapack.imageId]['last'] = time()
+        print('Grabbed frame #{}'.format(datapack.index))
+
+        #Check if Frame construction is complete
+        imageLen = self.chunkedFrames[clientId][datapack.imageId].get('len', float('inf'))
+        #currLen = number of chunks = len(dict) -1 for 'last' and -1 for potentially 'len'
+        currLen = len(self.chunkedFrames[clientId][datapack.imageId]) - 1
+        if imageLen != float('inf'):
+            currLen -= 1
+
+        print('{}/{} chunks gathered for image {}'.format(currLen,imageLen,datapack.imageId))
+        if currLen >= imageLen:
+            print('constructing...')
+            if self.isLater(datapack.imageId, self.chunkedFrames[clientId]['currId']):
+                image = self.constructFrame( self.chunkedFrames[clientId][datapack.imageId] )
+                self.currentFrames[clientId] = image
+                self.chunkedFrames[clientId]['currId'] = datapack.imageId
+            del self.chunkedFrames[clientId][datapack.imageId]
+
+    def isLater(self, id1, id2):
+        if id1 == id2:
+            return True
+        if id1 < id2:
+            id1 += 256
+        if id1 > id2 and id1 < id2 + 128:
+            return True
+        else:
+            return False
+
+    def constructFrame(self, chunkDict):
+        chunkList = [chunkDict[i] for i in range(chunkDict['len'])]
+        byteString = b''.join(chunkList)
+        image = cv2.imdecode(np.fromstring(byteString, np.uint8), cv2.IMREAD_COLOR)
+        return image
 
     def sendVideo(self):
         while self.connected:
-            data = self.cam.getFrame()
-            datapack = Netpack(packType=PackType.ClientData, data=data)
-            cv2.imshow('frame', data)
-            self.client.sendto(datapack.out(), self.server)
-            
-            sleep( 1/self.fps )
+            if time() - self.lastReceived >= START_PINGING:
+                pingpack = Netpack(packType=PackType.KeepAlive, data=PINGME.encode('UTF-8'))
+                self.client.sendto(pingpack.out(), self.server)
+            frameBytes = self.cam.getFrame()
+            print('original:',len(frameBytes))
+            self.sendFrameChunks(frameBytes)
+            #sleep( 1/self.fps )
 
     def recieveVideo(self):
         while self.connected:
             try:
                 data, addr = self.client.recvfrom(self.bufferSize)
                 datapack = Netpack(datapacket=data)
+                self.lastReceived = time()
 
                 if datapack.PackType == PackType.ClientData:
-                    self.clientFrames[datapack.head] = datapack.data
-                    #cv2.imshow('frame', datapack.data)
+                    datapack = Videopack(datapacket=data)
+                    if self.chunkedFrames.get(datapack.head, None) is None:
+                        self.chunkedFrames[datapack.head] = {'currId':0}
+                    self.processFrameChunk(datapack)
 
-                elif datapack.PackType == PackType.KeepAlive:
+                elif datapack.PackType == PackType.KeepAlive and datapack.data.decode() == PINGME:
                     outpack = Netpack(packType=PackType.KeepAlive, data=OK.encode('UTF-8'))
                     self.client.sendto(outpack.out(), self.server)
 
@@ -101,14 +178,29 @@ class VideoClient:
                 self.connected = False
                 print('Lost connection to server!')
     
+def printImg(videoClient):
+    while videoClient.connected:
+        for client, frame in videoClient.currentFrames.items():
+            print('Client {} | Len: {}'.format(client, len(frame)))
+            cv2.imshow('Client #{}'.format(client), frame)
+            cv2.waitKey( 1000 / fps )
 
+if __name__ == "__main__":
+    name = input("Enter name\n")
+    client = VideoClient('127.0.0.1', 8000, name=name)
+    client.start()
+
+    sleep(5)
+    printImg(client)
+
+    client.receiveThread.join()
+    client.sendThread.join()
+    displayThread.join()
 
 #HOST = input("Enter Server IP\n")
 #PORT = int(input("Enter Port Number\n"))
 #name = input("Enter name\n")
 
-#client = AudioClient(HOST, PORT, name=name)
-#client = VideoClient('127.0.0.1', 8000, name=name)
 #client.start()
 
 #client.receiveThread.join()
