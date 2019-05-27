@@ -5,14 +5,14 @@ from netpack import Netpack, PackType
 from time import time
 
 OK = 'ok'
-
-DEFAULT_BUFFER_SIZE = 2049
+PINGME = 'pingme'
+DEFAULT_BUFFER_SIZE = 4096
 
 class MediaServer:
     SOCKET_TIMEOUT = 0.5
     CLIENT_CONNECTION_TIMEOUT = 5.0
     START_PINGING = 2.0
-    MAX_PINGS = 3
+    MAX_PINGS = 5
     def __init__(self, host, port, bufferSize=DEFAULT_BUFFER_SIZE):
         self.server = socket(family=AF_INET, type=SOCK_DGRAM)
         self.server.settimeout(MediaServer.SOCKET_TIMEOUT)
@@ -67,9 +67,13 @@ class MediaServer:
 
         self.timeOfLastMessage[addr] = time()
         if datapack.PackType == PackType.ClientData:
-            self.broadcastAudio(addr, datapack.data)
+            self.broadcastData(addr, datapack)
         elif datapack.PackType == PackType.KeepAlive:
             self.missedPings[addr] = 0
+            if datapack.data.decode() == PINGME:
+                pingpack = Netpack(packType=PackType.KeepAlive, data=OK.encode(encoding='UTF-8'))
+                self.server.sendto(pingpack.out(), addr)
+
 
     def checkConnections(self):
         currTime = time()
@@ -81,9 +85,8 @@ class MediaServer:
                 
             elif ((currTime - lastTime >= MediaServer.START_PINGING) and 
             self.missedPings[addr] < MediaServer.MAX_PINGS):
-                datapack = Netpack(packType=PackType.KeepAlive, data=OK.encode(encoding='UTF-8'))
+                datapack = Netpack(packType=PackType.KeepAlive, data=PINGME.encode(encoding='UTF-8'))
                 self.server.sendto(datapack.out(), addr)
-                #print('Pinging {}...'.format(self.clients[addr]))
                 self.missedPings[addr] += 1
 
         for addr in disconnected:
@@ -100,8 +103,8 @@ class MediaServer:
 
 
 
-    def broadcastAudio(self, sentFrom, data):
-        datapack = Netpack(head=self.clientCharId[sentFrom], data=data)
+    def broadcastData(self, sentFrom, datapack):
+        datapack.head = self.clientCharId[sentFrom]
         for client in self.clients:
             if client != sentFrom:
                 self.server.sendto(datapack.out(), client)
@@ -113,6 +116,6 @@ class MediaServer:
 #PORT = int(input("Enter Port Number\n"))
 
 #server = MediaServer(HOST, PORT)
-
-server = MediaServer('127.0.0.1', 8000)
-server.start()
+if __name__ == "__main__":
+    server = MediaServer('127.0.0.1', 8000)
+    server.start()
