@@ -36,7 +36,9 @@ class Netpack:
             return None
 
     def out(self):
-        return chr(self.head).encode() + self.data
+        bytearr = bytearray(b'')
+        bytearr.append(self.head)
+        return bytes(bytearr + self.data)
 
 class Videopack(Netpack):
     def __init__(self, packType=None, head=None, data=None, imageId=None,
@@ -55,7 +57,10 @@ class Videopack(Netpack):
             self.imageLen = imageLen
 
     def out(self):
-        header = chr(self.head).encode() + chr(self.imageId).encode() + chr(self.index).encode()
+        bytearr = bytearray(b'')
+        bytearr.append(self.head)
+        bytearr.append(self.imageId)
+        bytearr.append(self.index)
         if self.index == 0:
-            header += chr(self.imageLen).encode()
-        return header + self.data
+            bytearr.append(self.imageLen)
+        return bytes(bytearr + self.data)
