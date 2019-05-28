@@ -10,6 +10,7 @@ PINGME = 'pingme'
 DEFAULT_BUFFER_SIZE = 2049
 CLIENT_CONNECTION_TIMEOUT = 7.5
 START_PINGING = 4.5
+ME = -1
 
 def getDefaultAudioSettings():
     DEFAULT_AUDIO_SETTINGS = {
@@ -38,6 +39,7 @@ class AudioClient:
             input=True, output=False)
 
         self.streamsOut = {}
+        self.isSpeaking = {}
         
         self.sendThread = None
         self.receiveThread = None
@@ -92,18 +94,23 @@ class AudioClient:
             if vol > self.audioSettings['THRESHOLD']:
                 datapack = Netpack(packType=PackType.ClientData, data=data)
                 self.client.sendto(datapack.out(), self.server)
-
+                self.isSpeaking[ME] = True
+            else:
+                self.isSpeaking[ME] = False
+ 
     def recieveAudio(self):
         while self.connected:
             try:
                 data, addr = self.client.recvfrom(self.bufferSize)
                 datapack = Netpack(datapacket=data)
                 self.lastReceived = time()
+                self.updateIsSpeaking()
 
                 if datapack.PackType == PackType.ClientData:
                     char = datapack.head
                     if self.streamsOut.get(char, None) is None:
                         self.addOutputStream(char)
+                    print(self.streamsOut[char].get_write_available())
                     self.streamsOut[char].write(datapack.data)
 
                 elif datapack.PackType == PackType.KeepAlive and datapack.data.decode() == PINGME:
@@ -113,7 +120,11 @@ class AudioClient:
             except timeout:
                 self.connected = False
                 print('Lost connection to server!')
-    
+
+    def updateIsSpeaking(self):
+        for char, stream in self.streamsOut.items():
+            #If stream is writing data then they are speaking
+            self.isSpeaking[char] = (stream.get_write_available() < self.audioSettings['CHUNK']*4)
 
 if __name__ == "__main__":
     #HOST = input("Enter Server IP\n")
