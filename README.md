@@ -1,3 +1,3 @@
 # DoubleSpeak
 
-UDP Server/Client Voice Chat in Python
+UDP Server/Client Voice & Video Chat in Python
