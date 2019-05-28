@@ -13,9 +13,10 @@ class MediaServer:
     CLIENT_CONNECTION_TIMEOUT = 5.0
     START_PINGING = 2.0
     MAX_PINGS = 5
-    def __init__(self, host, port, bufferSize=DEFAULT_BUFFER_SIZE):
+    def __init__(self, host, port, bufferSize=DEFAULT_BUFFER_SIZE, tag='media'):
         self.server = socket(family=AF_INET, type=SOCK_DGRAM)
         self.server.settimeout(MediaServer.SOCKET_TIMEOUT)
+        self.tag = tag
 
         self.hostAddr = (host,port)
         self.bufferSize = bufferSize
@@ -58,7 +59,7 @@ class MediaServer:
                 self.timeOfLastMessage[addr] = time()
                 self.missedPings[addr] = 0
 
-                print('{} has connected on {}!'.format(name, addr))
+                print('{} has connected to {} on {}!'.format(name, self.tag, addr))
                 datapack = Netpack(packType=PackType.Handshake, data=OK.encode(encoding='UTF-8'))
                 self.server.sendto(datapack.out(), addr)
             except:
@@ -94,7 +95,7 @@ class MediaServer:
 
     def disconnectClient(self, addr):
         name = self.clients[addr]
-        print('{} has disconnected!'.format(name))
+        print('{} has disconnected from {}!'.format(name, self.tag))
 
         del self.clients[addr]
         del self.clientCharId[addr]
