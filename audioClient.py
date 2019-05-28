@@ -6,8 +6,10 @@ from netpack import Netpack, PackType
 from time import time
 
 OK = 'ok'
+PINGME = 'pingme'
 DEFAULT_BUFFER_SIZE = 2049
 CLIENT_CONNECTION_TIMEOUT = 7.5
+START_PINGING = 4.5
 
 def getDefaultAudioSettings():
     DEFAULT_AUDIO_SETTINGS = {
@@ -77,10 +79,15 @@ class AudioClient:
 
             self.sendThread = Thread(target=self.sendAudio)
             self.sendThread.start()
+        return self.connected
 
     def sendAudio(self):
         while self.connected:
-            data = self.streamIn.read(self.audioSettings['CHUNK'])
+            if time() - self.lastReceived >= START_PINGING:
+                pingpack = Netpack(packType=PackType.KeepAlive, data=PINGME.encode('UTF-8'))
+                self.client.sendto(pingpack.out(), self.server)
+
+            data = self.streamIn.read(self.audioSettings['CHUNK'], exception_on_overflow = False)
             vol = max(array('h', data))
             if vol > self.audioSettings['THRESHOLD']:
                 datapack = Netpack(packType=PackType.ClientData, data=data)
@@ -91,6 +98,7 @@ class AudioClient:
             try:
                 data, addr = self.client.recvfrom(self.bufferSize)
                 datapack = Netpack(datapacket=data)
+                self.lastReceived = time()
 
                 if datapack.PackType == PackType.ClientData:
                     char = datapack.head
@@ -98,7 +106,7 @@ class AudioClient:
                         self.addOutputStream(char)
                     self.streamsOut[char].write(datapack.data)
 
-                elif datapack.PackType == PackType.KeepAlive:
+                elif datapack.PackType == PackType.KeepAlive and datapack.data.decode() == PINGME:
                     outpack = Netpack(packType=PackType.KeepAlive, data=OK.encode('UTF-8'))
                     self.client.sendto(outpack.out(), self.server)
 
