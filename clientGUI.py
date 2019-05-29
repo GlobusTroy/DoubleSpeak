@@ -17,20 +17,21 @@ GREEN = '#50eda6'
 
 
 class GUI:
-    def __init__(self, root, clientNames={}, currentFrames={}, clientSpeaking={}, height=HEIGHT, width=WIDTH):
-        self.clientNames = clientNames
+    def __init__(self, root, clientNamesVideo={}, clientNamesAudio={}, currentFrames={}, clientSpeaking={}, height=HEIGHT, width=WIDTH):
+        self.clientNamesVideo = clientNamesVideo
+        self.clientNamesAudio = clientNamesAudio
         self.currentFrames = currentFrames
         self.clientSpeaking = clientSpeaking
         self.root = root
         self.root.title('DoubleSpeak')
-        style = ttk.Style(root)
-        style.theme_use('clam')
+        #style = ttk.Style(root)
+        #style.theme_use('clam')
 
-        basesizer = tk.Canvas(self.root, height=height, width=width)
+        basesizer = tk.Canvas(self.root, height=height, width=width, bd=0, relief='flat')
         basesizer.pack()
 
         gold = (1/1.618)
-        self.canvas = tk.Canvas(self.root, bg=GREY, bd=5, relief='groove')
+        self.canvas = tk.Canvas(self.root, bg=GREY, bd=2, relief='flat')
         self.canvas.place(relx=0, rely=0, relwidth=gold, relheight=1.0)
 
         self.frame = tk.Frame(self.root, bd=5, bg=GREY2, relief='groove')
@@ -76,6 +77,8 @@ class GUI:
         self.__lastHeight = self.canvas.winfo_height()
         self.__lastWidth = self.canvas.winfo_width()
 
+        audioNameToNum = {v:k for k,v in self.clientNamesAudio.items()}
+
         for i, (clientNum, frame) in enumerate(sorted( self.currentFrames.items() )):
             x,y,w,h = self.getImageDimensions(i, len(self.currentFrames))
             
@@ -89,10 +92,14 @@ class GUI:
             bd = 2
 
             if newLabels:
-                self.labels[i] = tk.Label(self.canvas, text=self.clientNames.get(clientNum, '???'),fg='white', bg=GREY2)
+                self.labels[i] = tk.Label(self.canvas, text=self.clientNamesVideo.get(clientNum, '???'),fg='white', bg=GREY2)
                 self.labels[i].place(x=x+5*bd, y=y+5*bd, anchor='nw')
 
-            ringColor = BLACK if not self.clientSpeaking.get(clientNum, False) else GREEN
+            name = self.clientNamesVideo.get(clientNum, None)
+            audioClientNum = None
+            if name is not None:
+                audioClientNum = audioNameToNum.get(name, None)
+            ringColor = BLACK if not self.clientSpeaking.get(audioClientNum, False) else GREEN
             self.canvas.create_rectangle(x+bd//2,y+bd//2, x+w-bd//2, y+h-bd//2, width=bd, outline=ringColor, tag='rect')
 
         self.root.after(self.delay, self.update)

@@ -7,7 +7,8 @@ import tkinter as tk
 class MediaClient():
     def __init__(self, name):
         self.name = name
-        self.__clientNames = {videoClient.ME:name}
+        self.__clientNamesVideo = {videoClient.ME:name}
+        self.__clientNamesAudio = {audioClient.ME:name}
         self.__currentFrames = {}
         self.__clientSpeaking = {}
 
@@ -18,12 +19,16 @@ class MediaClient():
 
     def setAudioServer(self, audioHost, audioPort):
         self.audio = audioClient.AudioClient(audioHost, audioPort, name=name)
+        self.__clientNamesAudio = self.audio.clientNames
 
     def setVideoServer(self, videoHost, videoPort):
         self.video = videoClient.VideoClient(videoHost, videoPort, name=name)
+        self.__clientNamesVideo = self.video.clientNames
         
     def startAudio(self):
-        return self.audio.start()
+        ret = self.audio.start()
+        self.__clientSpeaking = self.audio.isSpeaking
+        return ret
 
     def startVideo(self):
         ret = self.video.start()
@@ -31,8 +36,9 @@ class MediaClient():
         return ret
 
     def startGui(self):
-        self.GUI = clientGUI.GUI(self.__root, clientNames=self.__clientNames,
-            currentFrames=self.__currentFrames, clientSpeaking=self.__clientSpeaking)
+        self.GUI = clientGUI.GUI(self.__root, clientNamesVideo=self.__clientNamesVideo,
+            clientNamesAudio=self.__clientNamesAudio, currentFrames=self.__currentFrames, 
+            clientSpeaking=self.__clientSpeaking)
 
     def startAll(self):
         self.startAudio()
