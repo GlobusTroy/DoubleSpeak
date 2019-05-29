@@ -5,6 +5,7 @@ class PackType(enum.Enum):
     Handshake = 2
     ServerMessage = 3
     KeepAlive = 4
+    NameQuery = 5
 
 class Netpack:
     CLIENT_DATA_MIN = 0
@@ -12,9 +13,10 @@ class Netpack:
     HANDSHAKE = 51
     SERVER_MESSAGE = 52
     KEEPALIVE = 53
+    NAMEQUERY = 54
 
     typeToOrd = {PackType.ClientData:CLIENT_DATA_MIN, PackType.ServerMessage:SERVER_MESSAGE,
-                PackType.KeepAlive:KEEPALIVE, PackType.Handshake:HANDSHAKE}
+                PackType.KeepAlive:KEEPALIVE, PackType.Handshake:HANDSHAKE, PackType.NameQuery:NAMEQUERY}
     ordToType = {v: k for k, v in typeToOrd.items()}
 
     def __init__(self, packType=None, head=None, data=None, datapacket=None):

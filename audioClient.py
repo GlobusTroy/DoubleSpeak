@@ -18,7 +18,7 @@ def getDefaultAudioSettings():
         'CHANNELS':1, 
         'RATE':44100, 
         'CHUNK':1024, 
-        'THRESHOLD':250}
+        'THRESHOLD':500}
     return DEFAULT_AUDIO_SETTINGS
 
 class AudioClient:
@@ -40,6 +40,7 @@ class AudioClient:
 
         self.streamsOut = {}
         self.isSpeaking = {}
+        self.clientNames = {ME:name}
         
         self.sendThread = None
         self.receiveThread = None
@@ -110,16 +111,30 @@ class AudioClient:
                     char = datapack.head
                     if self.streamsOut.get(char, None) is None:
                         self.addOutputStream(char)
-                    print(self.streamsOut[char].get_write_available())
+                        self.queryForName(char)
+                    #print(self.streamsOut[char].get_write_available())
                     self.streamsOut[char].write(datapack.data)
+
+                    if self.clientNames.get(char, None) is None:
+                        self.queryForName(char)
 
                 elif datapack.PackType == PackType.KeepAlive and datapack.data.decode() == PINGME:
                     outpack = Netpack(packType=PackType.KeepAlive, data=OK.encode('UTF-8'))
                     self.client.sendto(outpack.out(), self.server)
 
+                elif datapack.PackType == PackType.NameQuery:
+                    query = datapack.data.decode(encoding='UTF-8')
+                    char = int(query.split(':')[0])
+                    name = query.split(':')[1]
+                    self.clientNames[char] = name
+
             except timeout:
                 self.connected = False
                 print('Lost connection to server!')
+
+    def queryForName(self, clientNum):
+        outpack = Netpack(packType=PackType.NameQuery, data=str(clientNum).encode(encoding='UTF-8'))
+        self.client.sendto(outpack.out(), self.server)
 
     def updateIsSpeaking(self):
         for char, stream in self.streamsOut.items():

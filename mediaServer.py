@@ -74,6 +74,12 @@ class MediaServer:
             if datapack.data.decode() == PINGME:
                 pingpack = Netpack(packType=PackType.KeepAlive, data=OK.encode(encoding='UTF-8'))
                 self.server.sendto(pingpack.out(), addr)
+        elif datapack.PackType == PackType.NameQuery:
+            char = int(datapack.data.decode(encoding='UTF-8'))
+            addrQuery = {v:k for k,v in self.clientCharId.items()}[char]
+            namepack = Netpack(packType=PackType.NameQuery, 
+                data=(str(char)+':'+self.clients[addrQuery]).encode(encoding='UTF-8'))
+            self.server.sendto(namepack.out(), addr)
 
 
     def checkConnections(self):

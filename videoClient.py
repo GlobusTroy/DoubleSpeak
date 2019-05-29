@@ -52,6 +52,7 @@ class VideoClient:
         self.currentFrames = {}
         self.chunkedFrames = {}
 
+        self.clientNames = {ME:name}
         self.lastReceived = time()
         self.lastSent = time()
         self.connected = False
@@ -145,6 +146,10 @@ class VideoClient:
         else:
             return False
 
+    def queryForName(self, clientNum):
+        outpack = Netpack(packType=PackType.NameQuery, data=str(clientNum).encode(encoding='UTF-8'))
+        self.client.sendto(outpack.out(), self.server)
+
     def constructFrame(self, chunkDict):
         chunkList = [chunkDict[i] for i in range(chunkDict['len'])]
         byteString = b''.join(chunkList)
@@ -175,11 +180,21 @@ class VideoClient:
                     datapack = Videopack(datapacket=data)
                     if self.chunkedFrames.get(datapack.head, None) is None:
                         self.chunkedFrames[datapack.head] = {'currId':0}
+                        self.queryForName(datapack.head)
                     self.processFrameChunk(datapack)
+
+                    if self.clientNames.get(datapack.head, None) is None:
+                        self.queryForName(datapack.head)
 
                 elif datapack.PackType == PackType.KeepAlive and datapack.data.decode() == PINGME:
                     outpack = Netpack(packType=PackType.KeepAlive, data=OK.encode('UTF-8'))
                     self.client.sendto(outpack.out(), self.server)
+
+                elif datapack.PackType == PackType.NameQuery:
+                    query = datapack.data.decode(encoding='UTF-8')
+                    char = int(query.split(':')[0])
+                    name = query.split(':')[1]
+                    self.clientNames[char] = name
 
             except timeout:
                 self.connected = False
